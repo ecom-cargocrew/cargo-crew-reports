@@ -134,6 +134,9 @@
   .kpi-delta { font-size: 11px; margin-top: 6px; }
   .kpi-delta.up { color: var(--positive); }
   .kpi-delta.down { color: var(--negative); }
+  .kpi-mom { font-size: 10px; margin-top: 5px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 6px; margin-top: 8px; }
+  .kpi-mom span.up { color: var(--positive); }
+  .kpi-mom span.down { color: var(--negative); }
 
   /* Chart grid */
   .chart-grid {
@@ -306,6 +309,15 @@
 </style>
 </head>
 <body>
+<div id="loadingOverlay" style="
+  position:fixed;top:0;left:0;width:100%;height:100%;
+  background:var(--bg);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;z-index:9999;
+  font-family:'DM Mono',monospace;color:var(--accent);gap:16px;
+">
+  <div style="font-size:32px;animation:spin 1.2s linear infinite;">⟳</div>
+  <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;">Loading data…</div>
+</div>
 
 <div class="header">
   <div class="header-text">
@@ -485,11 +497,15 @@ async function initFromSheets() {
       `Daily data aggregated monthly · ${first} – ${last} (FY ends 30 June) · ${parsed.length} months`;
 
     render();
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) overlay.style.display = 'none';
   } catch(err) {
     if (icon) { icon.classList.remove('spinning'); icon.textContent = '✗'; }
     status.className = 'upload-status error';
     status.textContent = '✗ ' + err.message + ' — drop a CSV to load manually';
     badge.textContent = '';
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) overlay.style.display = 'none';
   }
 }
 
@@ -733,7 +749,39 @@ function buildKPI() {
   function deltaHtml(d, label) {
     if (d === null) return '';
     const cls = d >= 0 ? 'up' : 'down';
-    return `<div class="kpi-delta ${cls}">${d >= 0 ? '▲' : '▼'} ${Math.abs(d)}% ${label}</div>`;
+    const arrow = d >= 0 ? '&#9650;' : '&#9660;';
+    return '<div class="kpi-delta ' + cls + '">' + arrow + ' ' + Math.abs(d) + '% ' + label + '</div>';
+  }
+
+  // ── Current month vs previous month ──────────────────────────────────────
+  // Use the two most recent months in ALL data (regardless of FY filter)
+  const allSorted = [...DATA].sort((a,b) => a.ym.localeCompare(b.ym));
+  const latestYM  = allSorted[allSorted.length - 1];
+  const prevYM    = allSorted[allSorted.length - 2];
+
+  const momQtyDelta = (latestYM && prevYM && prevYM.qty > 0)
+    ? pct(latestYM.qty, prevYM.qty) : null;
+  const momOrdDelta = (latestYM && prevYM && prevYM.ord > 0)
+    ? pct(latestYM.ord, prevYM.ord) : null;
+
+  // Format month label e.g. "2026-04" → "Apr 26"
+  function fmtYM(ym) {
+    if (!ym) return '';
+    const parts = ym.split('-');
+    return MONTHS[+parts[1] - 1] + " '" + parts[0].slice(2);
+  }
+
+  function momHtml(currentVal, delta, currentYM, prevYM) {
+    if (delta === null || !currentYM || !prevYM) return '';
+    const cls = delta >= 0 ? 'up' : 'down';
+    const arrow = delta >= 0 ? '&#9650;' : '&#9660;';
+    const sign = delta >= 0 ? '+' : '';
+    return '<div class="kpi-mom">'
+      + '<span style="color:var(--text);font-weight:700;">' + fmt(currentVal) + '</span>'
+      + '<span style="margin:0 4px;">this month</span>'
+      + '<span class="' + cls + '">' + arrow + ' ' + sign + Math.abs(delta) + '%</span>'
+      + '<span style="margin-left:3px;">vs ' + fmtYM(prevYM.ym) + '</span>'
+      + '</div>';
   }
 
   document.getElementById('kpiRow').innerHTML = `
@@ -741,11 +789,13 @@ function buildKPI() {
       <div class="kpi-label">Shipped Qty</div>
       <div class="kpi-value">${totalQty >= 1000000 ? (totalQty/1000000).toFixed(2)+'M' : fmt(totalQty)}</div>
       ${deltaHtml(qtyDelta, deltaLabel)}
+      ${momHtml(latestYM ? latestYM.qty : 0, momQtyDelta, latestYM, prevYM)}
     </div>
     <div class="kpi">
       <div class="kpi-label">Order Count</div>
       <div class="kpi-value">${totalOrd >= 1000000 ? (totalOrd/1000000).toFixed(2)+'M' : fmt(totalOrd)}</div>
       ${deltaHtml(ordDelta, deltaLabel)}
+      ${momHtml(latestYM ? latestYM.ord : 0, momOrdDelta, latestYM, prevYM)}
     </div>
     <div class="kpi yellow">
       <div class="kpi-label">Avg Qty / Order</div>
@@ -1155,7 +1205,11 @@ function render() {
 }
 
 // Kick off — fetch from Google Sheets on load
-initFromSheets();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initFromSheets);
+} else {
+  initFromSheets();
+}
 </script>
 </body>
 </html>
