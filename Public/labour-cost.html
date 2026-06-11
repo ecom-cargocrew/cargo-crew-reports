@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Labour Cost Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap');
+
+:root {
+  --bg:        #0d0f14;
+  --surface:   #141720;
+  --surface2:  #1c2030;
+  --border:    #252b3b;
+  --accent:    #4fffb0;   /* green — warehouse */
+  --accent2:   #ff6b6b;   /* red — alert / over target */
+  --accent3:   #ffc857;   /* amber — embroidery */
+  --accent4:   #7b8cde;   /* blue — combined */
+  --text:      #e8ecf4;
+  --muted:     #6b7280;
+  --positive:  #4affb0;
+  --negative:  #ff6b6b;
+  --target:    #ffc857;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Mono', monospace;
+  min-height: 100vh;
+  padding: 32px 24px;
+}
+
+/* ── HEADER ── */
+.header {
+  margin-bottom: 40px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+.header-text .eyebrow {
+  font-size: 10px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+.header-text h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(28px, 4vw, 48px);
+  font-weight: 800;
+  letter-spacing: -1px;
+  color: var(--text);
+  line-height: 1.1;
+}
+.header-text .sub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 8px;
+  letter-spacing: 1px;
+}
+.header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.back-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ── DATA ZONE ── */
+.data-zone {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.data-zone-left { display: flex; align-items: center; gap: 14px; }
+.data-icon {
+  width: 36px; height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--accent); font-size: 16px;
+}
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.data-icon.spinning { animation: spin 1.2s linear infinite; }
+.data-title { font-size: 12px; font-weight: 500; color: var(--text); }
+.data-hint { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.data-status { font-size: 10px; letter-spacing: 1px; }
+.data-status.ok { color: var(--positive); }
+.data-status.err { color: var(--negative); }
+.data-badge { font-size: 10px; color: var(--muted); letter-spacing: 1px; }
+.refresh-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--accent);
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.refresh-btn:hover { border-color: var(--accent); }
+
+/* ── VIEW TABS ── */
+.view-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.view-tab {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 7px 18px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.view-tab:hover { border-color: var(--accent); color: var(--accent); }
+.view-tab.active.wh { background: var(--accent); border-color: var(--accent); color: #0d0f14; font-weight: 700; }
+.view-tab.active.combined { background: var(--accent4); border-color: var(--accent4); color: #0d0f14; font-weight: 700; }
+
+/* ── TIME RANGE ── */
+.time-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.time-label { font-size: 10px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-right: 4px; }
+.time-btn {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 1px;
+  padding: 5px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.time-btn:hover { border-color: var(--text); color: var(--text); }
+.time-btn.active { background: var(--surface2); border-color: var(--text); color: var(--text); }
+
+/* ── KPI CARDS ── */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.kpi {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px 20px;
+  border-top: 2px solid var(--border);
+  transition: border-color 0.2s;
+}
+.kpi.highlight { border-top-color: var(--accent); }
+.kpi.alert { border-top-color: var(--negative); }
+.kpi.target-met { border-top-color: var(--positive); }
+.kpi.target-miss { border-top-color: var(--negative); }
+.kpi-label {
+  font-size: 9px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.kpi-value {
+  font-family: 'Syne', sans-serif;
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1;
+}
+.kpi-sub {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+.kpi-target {
+  font-size: 10px;
+  margin-top: 6px;
+  padding: 3px 8px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.kpi-target.good { background: rgba(74,255,176,0.12); color: var(--positive); }
+.kpi-target.bad  { background: rgba(255,107,107,0.12); color: var(--negative); }
+
+/* ── CHARTS ── */
+.chart-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.chart-grid.single { grid-template-columns: 1fr; }
+@media (max-width: 900px) { .chart-grid { grid-template-columns: 1fr; } }
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px 20px 16px;
+}
+.chart-card.full { grid-column: 1 / -1; }
+.chart-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.chart-sub {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 1px;
+  margin-bottom: 16px;
+}
+.chart-wrap { position: relative; height: 220px; }
+.chart-wrap.tall { height: 280px; }
+
+/* ── TARGET BADGE ── */
+.target-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  padding: 4px 10px;
+  border-radius: 3px;
+  border: 1px solid var(--target);
+  color: var(--target);
+  margin-bottom: 12px;
+}
+
+/* ── TABLE ── */
+.table-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  overflow-x: auto;
+  margin-bottom: 28px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+th {
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: right;
+  padding: 0 12px 10px;
+  border-bottom: 1px solid var(--border);
+}
+th:first-child { text-align: left; }
+td {
+  padding: 9px 12px;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+td:first-child { text-align: left; color: var(--muted); }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--surface2); }
+.badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.badge.good { background: rgba(74,255,176,0.12); color: var(--positive); }
+.badge.bad  { background: rgba(255,107,107,0.12); color: var(--negative); }
+
+/* ── LOADING OVERLAY ── */
+#loadingOverlay {
+  position: fixed; top:0; left:0; width:100%; height:100%;
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  z-index: 9999; gap: 16px;
+}
+#loadingOverlay .spin { font-size: 32px; animation: spin 1.2s linear infinite; }
+#loadingOverlay .msg { font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div id="loadingOverlay">
+  <div class="spin">⟳</div>
+  <div class="msg">Loading data…</div>
+</div>
+
+<div class="header">
+  <div class="header-text">
+    <div class="eyebrow">Warehouse Operations</div>
+    <h1>Labour Cost Report</h1>
+    <div class="sub" id="headerSub">Weekly labour cost vs shipped units · AU warehouse only</div>
+  </div>
+  <div class="header-right">
+    <a class="back-btn" href="index.html">← Reports Hub</a>
+  </div>
+</div>
+
+<!-- Data source zone -->
+<div class="data-zone">
+  <div class="data-zone-left">
+    <div class="data-icon" id="dataIcon">⟳</div>
+    <div>
+      <div class="data-title">Live Google Sheets</div>
+      <div class="data-hint">Cost + shipping data from linked spreadsheet</div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+    <div class="data-status" id="dataStatus">Loading…</div>
+    <div class="data-badge" id="dataBadge"></div>
+  </div>
+  <button class="refresh-btn" onclick="loadData()">⟳ Refresh</button>
+</div>
+
+<!-- View toggle: Warehouse only vs Combined -->
+<div class="view-tabs">
+  <button class="view-tab wh active" id="tabWH" onclick="setView('wh')">Warehouse Only</button>
+  <button class="view-tab combined" id="tabCombined" onclick="setView('combined')">Warehouse + Embroidery</button>
+</div>
+
+<!-- Time range filter -->
+<div class="time-bar">
+  <span class="time-label">Period:</span>
+  <button class="time-btn" onclick="setRange(12)">Last 12 wks</button>
+  <button class="time-btn" onclick="setRange(26)">Last 26 wks</button>
+  <button class="time-btn active" onclick="setRange(52)">Last 52 wks</button>
+  <button class="time-btn" onclick="setRange(0)">All</button>
+</div>
+
+<!-- KPI cards -->
+<div class="kpi-row" id="kpiRow"></div>
+
+<!-- Cost per unit chart — full width, prominent -->
+<div class="chart-card full" style="margin-bottom:16px;">
+  <div class="chart-title">Cost Per Unit Shipped</div>
+  <div class="chart-sub">Weekly labour cost ÷ AU shipped units · target $1.00</div>
+  <div class="target-badge">&#9650; Target: $1.00 / unit</div>
+  <div class="chart-wrap tall"><canvas id="cpuChart"></canvas></div>
+</div>
+
+<div class="chart-grid">
+  <div class="chart-card">
+    <div class="chart-title">Weekly Hours</div>
+    <div class="chart-sub">Total labour hours per week</div>
+    <div class="chart-wrap"><canvas id="hrsChart"></canvas></div>
+  </div>
+  <div class="chart-card">
+    <div class="chart-title">Weekly Cost</div>
+    <div class="chart-sub">Total labour cost per week ($)</div>
+    <div class="chart-wrap"><canvas id="costChart"></canvas></div>
+  </div>
+  <div class="chart-card">
+    <div class="chart-title">Units Per Hour</div>
+    <div class="chart-sub">AU shipped units ÷ labour hours</div>
+    <div class="chart-wrap"><canvas id="uphChart"></canvas></div>
+  </div>
+  <div class="chart-card">
+    <div class="chart-title">Units Shipped (AU)</div>
+    <div class="chart-sub">Weekly AU warehouse outbound units</div>
+    <div class="chart-wrap"><canvas id="unitsChart"></canvas></div>
+  </div>
+</div>
+
+<!-- Weekly detail table -->
+<div class="table-card">
+  <div class="chart-title" style="margin-bottom:4px;">Weekly Detail</div>
+  <div class="chart-sub">Most recent 20 weeks</div>
+  <div id="tableWrap"></div>
+</div>
+
+<script>
+// ── CONFIG ────────────────────────────────────────────────────────────────────
+const SHEET_ID   = '17z_x6F8_QOUwo7Rtk6Sj5nBbAU6rvasibGk261fMcsQ';
+const COST_URL   = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Warehouse%20throughput%20-%20Cost`;
+const SHIP_URL   = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=0`;
+const TARGET_CPU = 1.00;
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let WEEKS   = []; // processed weekly rows
+let currentView  = 'wh';   // 'wh' | 'combined'
+let currentRange = 52;     // weeks to show (0 = all)
+let charts = {};
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function parseDate(s) {
+  if (!s) return null;
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) {
+    const [d, m, y] = s.split('/');
+    return new Date(`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`);
+  }
+  return new Date(s);
+}
+
+function fmtDate(s) {
+  const d = parseDate(s);
+  if (!d || isNaN(d)) return s;
+  return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: '2-digit' });
+}
+
+function fmt(n, dp=0) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  return n.toLocaleString('en-AU', { minimumFractionDigits: dp, maximumFractionDigits: dp });
+}
+
+function fmtDollar(n, dp=0) {
+  if (n === null || isNaN(n)) return '—';
+  return '$' + fmt(n, dp);
+}
+
+// ── CSV PARSE ─────────────────────────────────────────────────────────────────
+function parseCSVLines(text) {
+  return text.split(/\r?\n/).filter(l => l.trim()).map(line => {
+    const cols = [];
+    let cur = '', inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') { inQ = !inQ; }
+      else if (c === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
+      else cur += c;
+    }
+    cols.push(cur.trim());
+    return cols;
+  });
+}
+
+// ── LOAD DATA ─────────────────────────────────────────────────────────────────
+async function loadData() {
+  const icon   = document.getElementById('dataIcon');
+  const status = document.getElementById('dataStatus');
+  const badge  = document.getElementById('dataBadge');
+
+  icon.textContent = '⟳';
+  icon.classList.add('spinning');
+  status.className = 'data-status';
+  status.textContent = 'Loading…';
+
+  try {
+    const [costRes, shipRes] = await Promise.all([fetch(COST_URL), fetch(SHIP_URL)]);
+    if (!costRes.ok) throw new Error('Could not load cost data');
+    if (!shipRes.ok) throw new Error('Could not load shipping data');
+
+    const costText = await costRes.text();
+    const shipText = await shipRes.text();
+
+    WEEKS = processData(costText, shipText);
+
+    icon.classList.remove('spinning');
+    icon.textContent = '✓';
+    status.className = 'data-status ok';
+    status.textContent = `✓ ${WEEKS.length} weeks loaded`;
+    const now = new Date().toLocaleString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    badge.textContent = 'Last synced: ' + now;
+
+    document.getElementById('headerSub').textContent =
+      `Weekly labour cost vs shipped units · ${fmtDate(WEEKS[0]?.startDate)} – ${fmtDate(WEEKS[WEEKS.length-1]?.startDate)} · ${WEEKS.length} weeks`;
+
+    document.getElementById('loadingOverlay').style.display = 'none';
+    render();
+
+  } catch(err) {
+    icon.classList.remove('spinning');
+    icon.textContent = '✗';
+    status.className = 'data-status err';
+    status.textContent = '✗ ' + err.message;
+    document.getElementById('loadingOverlay').style.display = 'none';
+  }
+}
+
+// ── PROCESS DATA ──────────────────────────────────────────────────────────────
+function processData(costText, shipText) {
+  // ── 1. Aggregate cost data by week ────────────────────────────────────────
+  const costLines = parseCSVLines(costText).slice(1);
+  const SKIP_TYPES = new Set(['ETP Tax Withheld','Part Period Reduction','Back Pay','Bernadette Finance','Higher Duties']);
+
+  const costMap = {}; // key: "startDate|endDate"
+  costLines.forEach(cols => {
+    const dept     = cols[2] || '';
+    const subType  = cols[3] || '';
+    const hrs      = parseFloat(cols[4]) || 0;
+    const startStr = cols[5] || '';
+    const endStr   = cols[6] || '';
+    const total    = parseFloat(cols[8]) || 0;
+
+    if (SKIP_TYPES.has(subType)) return;
+    if (!startStr || !endStr) return;
+    if (!['Warehouse','Embroidery'].includes(dept)) return;
+
+    const key = startStr + '|' + endStr;
+    if (!costMap[key]) costMap[key] = { startDate: startStr, endDate: endStr, whHrs: 0, whCost: 0, embHrs: 0, embCost: 0 };
+    if (dept === 'Warehouse')  { costMap[key].whHrs  += hrs;   costMap[key].whCost  += total; }
+    if (dept === 'Embroidery') { costMap[key].embHrs += hrs;   costMap[key].embCost += total; }
+  });
+
+  // ── 2. Aggregate AU shipping by week matching cost date ranges ────────────
+  const shipLines = parseCSVLines(shipText).slice(1);
+  const header    = parseCSVLines(shipText)[0].map(h => h.toLowerCase());
+  const qtyIdx    = header.findIndex(h => h === 'shipped quantity');
+  const ordIdx    = header.findIndex(h => h.includes('order count'));
+  const locIdx    = header.findIndex(h => h.includes('location'));
+  const dateIdx   = 0;
+
+  // Build daily AU shipment map
+  const dailyAU = {}; // ym-dd => { qty, ord }
+  shipLines.forEach(cols => {
+    const loc = locIdx !== -1 ? cols[locIdx] : '';
+    if (!loc.toLowerCase().includes('uni hill') && loc !== '') return; // AU only (or blank = pre-location data)
+    const dateStr = cols[dateIdx];
+    const d = parseDate(dateStr);
+    if (!d || isNaN(d)) return;
+    const key = d.toISOString().slice(0,10);
+    const qty = parseInt(cols[qtyIdx]) || 0;
+    const ord = parseInt(cols[ordIdx]) || 0;
+    if (!dailyAU[key]) dailyAU[key] = { qty: 0, ord: 0 };
+    dailyAU[key].qty += qty;
+    dailyAU[key].ord += ord;
+  });
+
+  // For each cost week, sum AU shipping units/orders within that date range
+  const weeks = Object.values(costMap).map(w => {
+    const start = parseDate(w.startDate);
+    const end   = parseDate(w.endDate);
+    let units = 0, orders = 0;
+
+    if (start && end) {
+      const cur = new Date(start);
+      while (cur <= end) {
+        const k = cur.toISOString().slice(0,10);
+        if (dailyAU[k]) { units += dailyAU[k].qty; orders += dailyAU[k].ord; }
+        cur.setDate(cur.getDate() + 1);
+      }
+    }
+
+    const whHrs   = w.whHrs;
+    const whCost  = w.whCost;
+    const combHrs = w.whHrs + w.embHrs;
+    const combCost = w.whCost + w.embCost;
+
+    return {
+      startDate: w.startDate,
+      endDate:   w.endDate,
+      whHrs,   whCost,
+      embHrs:  w.embHrs,  embCost: w.embCost,
+      combHrs, combCost,
+      units, orders,
+      // Derived
+      whCpu:   units > 0 ? whCost / units   : null,
+      combCpu: units > 0 ? combCost / units : null,
+      whUph:   whHrs > 0 && units > 0 ? units / whHrs   : null,
+      combUph: combHrs > 0 && units > 0 ? units / combHrs : null,
+    };
+  });
+
+  // Sort by start date ascending
+  weeks.sort((a,b) => {
+    const da = parseDate(a.startDate), db = parseDate(b.startDate);
+    return da - db;
+  });
+
+  return weeks;
+}
+
+// ── FILTERED DATA ─────────────────────────────────────────────────────────────
+function filteredWeeks() {
+  if (currentRange === 0) return WEEKS;
+  return WEEKS.slice(-currentRange);
+}
+
+// ── SETTERS ───────────────────────────────────────────────────────────────────
+function setView(v) {
+  currentView = v;
+  document.getElementById('tabWH').className       = 'view-tab wh'       + (v === 'wh'       ? ' active' : '');
+  document.getElementById('tabCombined').className = 'view-tab combined' + (v === 'combined' ? ' active' : '');
+  render();
+}
+
+function setRange(n) {
+  currentRange = n;
+  document.querySelectorAll('.time-btn').forEach(b => {
+    const bN = b.textContent.includes('12') ? 12 : b.textContent.includes('26') ? 26 : b.textContent.includes('52') ? 52 : 0;
+    b.className = 'time-btn' + (bN === n ? ' active' : '');
+  });
+  render();
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+function render() {
+  const data = filteredWeeks();
+  if (!data.length) return;
+
+  const isWH = currentView === 'wh';
+  const accentColor = isWH ? '#4fffb0' : '#7b8cde';
+
+  // Current metric accessors
+  const hrs  = d => isWH ? d.whHrs   : d.combHrs;
+  const cost = d => isWH ? d.whCost  : d.combCost;
+  const cpu  = d => isWH ? d.whCpu   : d.combCpu;
+  const uph  = d => isWH ? d.whUph   : d.combUph;
+
+  buildKPI(data, { hrs, cost, cpu, uph, accentColor });
+  buildCpuChart(data, cpu, accentColor);
+  buildHrsChart(data, hrs, accentColor);
+  buildCostChart(data, cost, accentColor);
+  buildUphChart(data, uph, accentColor);
+  buildUnitsChart(data, accentColor);
+  buildTable(data, { hrs, cost, cpu, uph });
+}
+
+// ── KPI ───────────────────────────────────────────────────────────────────────
+function buildKPI(data, { hrs, cost, cpu, uph }) {
+  // Use last 4 full weeks for headline KPIs
+  const recent = data.slice(-4);
+  const totalHrs   = recent.reduce((s,d) => s + hrs(d), 0);
+  const totalCost  = recent.reduce((s,d) => s + cost(d), 0);
+  const totalUnits = recent.reduce((s,d) => s + d.units, 0);
+  const totalOrders= recent.reduce((s,d) => s + d.orders, 0);
+  const avgCpu     = totalUnits > 0 ? totalCost / totalUnits : null;
+  const avgUph     = totalHrs   > 0 && totalUnits > 0 ? totalUnits / totalHrs : null;
+
+  // WoW change on cost per unit
+  const lastCpu = cpu(data[data.length-1]);
+  const prevCpu = data.length > 1 ? cpu(data[data.length-2]) : null;
+  const cpuChange = (lastCpu && prevCpu && prevCpu > 0) ? ((lastCpu - prevCpu) / prevCpu * 100).toFixed(1) : null;
+
+  const cpuGood = avgCpu !== null && avgCpu <= TARGET_CPU;
+  const row = document.getElementById('kpiRow');
+
+  row.innerHTML = `
+    <div class="kpi ${avgCpu !== null ? (cpuGood ? 'target-met' : 'target-miss') : 'highlight'}">
+      <div class="kpi-label">Cost / Unit</div>
+      <div class="kpi-value">${avgCpu !== null ? fmtDollar(avgCpu, 2) : '—'}</div>
+      <div class="kpi-sub">4-week avg</div>
+      ${avgCpu !== null ? `<div class="kpi-target ${cpuGood ? 'good' : 'bad'}">${cpuGood ? '&#10003; Under $1.00' : '&#9650; Over $1.00 target'}</div>` : ''}
+    </div>
+    <div class="kpi highlight">
+      <div class="kpi-label">Units / Hr</div>
+      <div class="kpi-value">${avgUph !== null ? fmt(avgUph, 1) : '—'}</div>
+      <div class="kpi-sub">4-week avg</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Total Hours</div>
+      <div class="kpi-value">${fmt(totalHrs, 0)}</div>
+      <div class="kpi-sub">last 4 weeks</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Total Cost</div>
+      <div class="kpi-value">${fmtDollar(totalCost, 0)}</div>
+      <div class="kpi-sub">last 4 weeks</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Units Shipped</div>
+      <div class="kpi-value">${fmt(totalUnits)}</div>
+      <div class="kpi-sub">AU · last 4 weeks</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Orders</div>
+      <div class="kpi-value">${fmt(totalOrders)}</div>
+      <div class="kpi-sub">AU · last 4 weeks</div>
+    </div>
+  `;
+}
+
+// ── CHART HELPERS ─────────────────────────────────────────────────────────────
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+function baseLineOpts(label, color, data, labels) {
+  return {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label,
+        data,
+        borderColor: color,
+        backgroundColor: color + '18',
+        borderWidth: 2,
+        pointRadius: data.length > 40 ? 0 : 3,
+        pointHoverRadius: 5,
+        fill: true,
+        tension: 0.3,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: {
+        backgroundColor: '#1c2030', borderColor: '#252b3b', borderWidth: 1,
+        titleColor: '#e8ecf4', bodyColor: '#6b7280',
+        callbacks: { label: ctx => ' ' + ctx.formattedValue }
+      }},
+      scales: {
+        x: { grid: { color: '#252b3b' }, ticks: { color: '#6b7280', font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 10 } },
+        y: { grid: { color: '#252b3b' }, ticks: { color: '#6b7280', font: { family: 'DM Mono', size: 9 } } }
+      }
+    }
+  };
+}
+
+// ── CPU CHART ─────────────────────────────────────────────────────────────────
+function buildCpuChart(data, cpuFn, color) {
+  destroyChart('cpu');
+  const labels = data.map(d => fmtDate(d.startDate));
+  const vals   = data.map(d => cpuFn(d) !== null ? +cpuFn(d).toFixed(3) : null);
+
+  const cfg = baseLineOpts('Cost/Unit', color, vals, labels);
+  // Colour points by over/under target
+  cfg.data.datasets[0].pointBackgroundColor = vals.map(v =>
+    v === null ? 'transparent' : v <= TARGET_CPU ? '#4fffb0' : '#ff6b6b'
+  );
+  cfg.data.datasets[0].pointBorderColor = cfg.data.datasets[0].pointBackgroundColor;
+  cfg.data.datasets[0].pointRadius = data.length > 40 ? 2 : 4;
+  // Target annotation line via second dataset
+  cfg.data.datasets.push({
+    label: 'Target $1.00',
+    data: vals.map(() => TARGET_CPU),
+    borderColor: '#ffc857',
+    borderWidth: 1.5,
+    borderDash: [6, 4],
+    pointRadius: 0,
+    fill: false,
+    tension: 0,
+  });
+  cfg.options.scales.y.ticks.callback = v => '$' + v.toFixed(2);
+  cfg.options.plugins.tooltip.callbacks.label = ctx =>
+    ctx.datasetIndex === 0 ? ' $' + (ctx.raw || 0).toFixed(2) : ' Target $1.00';
+  cfg.options.plugins.legend = { display: true, labels: { color: '#6b7280', font: { family: 'DM Mono', size: 10 }, boxWidth: 20 } };
+
+  charts['cpu'] = new Chart(document.getElementById('cpuChart'), cfg);
+}
+
+// ── HRS CHART ─────────────────────────────────────────────────────────────────
+function buildHrsChart(data, hrsFn, color) {
+  destroyChart('hrs');
+  const labels = data.map(d => fmtDate(d.startDate));
+  const vals   = data.map(d => +hrsFn(d).toFixed(1));
+  const cfg = baseLineOpts('Hours', color, vals, labels);
+  charts['hrs'] = new Chart(document.getElementById('hrsChart'), cfg);
+}
+
+// ── COST CHART ────────────────────────────────────────────────────────────────
+function buildCostChart(data, costFn, color) {
+  destroyChart('cost');
+  const labels = data.map(d => fmtDate(d.startDate));
+  const vals   = data.map(d => +costFn(d).toFixed(0));
+  const cfg = baseLineOpts('Cost', color, vals, labels);
+  cfg.options.scales.y.ticks.callback = v => '$' + (v >= 1000 ? (v/1000).toFixed(0)+'k' : v);
+  cfg.options.plugins.tooltip.callbacks.label = ctx => ' $' + fmt(ctx.raw, 0);
+  charts['cost'] = new Chart(document.getElementById('costChart'), cfg);
+}
+
+// ── UPH CHART ─────────────────────────────────────────────────────────────────
+function buildUphChart(data, uphFn, color) {
+  destroyChart('uph');
+  const labels = data.map(d => fmtDate(d.startDate));
+  const vals   = data.map(d => uphFn(d) !== null ? +uphFn(d).toFixed(2) : null);
+  const cfg = baseLineOpts('Units/Hr', color, vals, labels);
+  charts['uph'] = new Chart(document.getElementById('uphChart'), cfg);
+}
+
+// ── UNITS CHART ───────────────────────────────────────────────────────────────
+function buildUnitsChart(data, color) {
+  destroyChart('units');
+  const labels = data.map(d => fmtDate(d.startDate));
+  const vals   = data.map(d => d.units);
+  const cfg = {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'AU Units', data: vals, backgroundColor: color + '55', borderColor: color, borderWidth: 1, borderRadius: 2 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: {
+        backgroundColor: '#1c2030', borderColor: '#252b3b', borderWidth: 1,
+        titleColor: '#e8ecf4', bodyColor: '#6b7280',
+      }},
+      scales: {
+        x: { grid: { color: '#252b3b' }, ticks: { color: '#6b7280', font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 10 } },
+        y: { grid: { color: '#252b3b' }, ticks: { color: '#6b7280', font: { family: 'DM Mono', size: 9 } } }
+      }
+    }
+  };
+  charts['units'] = new Chart(document.getElementById('unitsChart'), cfg);
+}
+
+// ── TABLE ─────────────────────────────────────────────────────────────────────
+function buildTable(data, { hrs, cost, cpu, uph }) {
+  const rows = [...data].reverse().slice(0, 20);
+  const html = `<table>
+    <thead><tr>
+      <th>Week Starting</th>
+      <th>Week Ending</th>
+      <th>Hours</th>
+      <th>Cost</th>
+      <th>Units (AU)</th>
+      <th>Orders</th>
+      <th>Units / Hr</th>
+      <th>Cost / Unit</th>
+    </tr></thead>
+    <tbody>
+      ${rows.map(d => {
+        const c = cpu(d);
+        const cpuBadge = c !== null
+          ? `<span class="badge ${c <= TARGET_CPU ? 'good' : 'bad'}">${fmtDollar(c, 2)}</span>`
+          : '—';
+        return `<tr>
+          <td>${fmtDate(d.startDate)}</td>
+          <td>${fmtDate(d.endDate)}</td>
+          <td>${fmt(hrs(d), 1)}</td>
+          <td>${fmtDollar(cost(d), 0)}</td>
+          <td>${fmt(d.units)}</td>
+          <td>${fmt(d.orders)}</td>
+          <td>${uph(d) !== null ? fmt(uph(d), 2) : '—'}</td>
+          <td>${cpuBadge}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>`;
+  document.getElementById('tableWrap').innerHTML = html;
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', loadData);
+} else {
+  loadData();
+}
+</script>
+</body>
+</html>
