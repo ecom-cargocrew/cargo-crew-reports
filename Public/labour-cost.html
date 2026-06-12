@@ -521,29 +521,40 @@ async function loadData() {
 function processData(costText, shipText) {
   const SKIP_TYPES = new Set(['ETP Tax Withheld','Part Period Reduction','Back Pay','Bernadette Finance','Higher Duties']);
 
-  // ── 1. Aggregate cost by calendar month (YYYY-MM) ─────────────────────────
-  // Each pay row has a Start Date — we attribute the cost to that month.
-  // This normalises weekly vs fortnightly pay periods cleanly.
-  const costByMonth = {}; // ym => { whHrs, whCost, embHrs, embCost }
+  // ── 1. Aggregate cost by calendar month, prorating across month boundaries ─
+  // e.g. a pay period 25 May – 7 June (14 days) splits: 7 days to May, 7 days to June
+  const costByMonth = {};
 
   parseCSVLines(costText).slice(1).forEach(cols => {
     const dept     = cols[2] || '';
     const subType  = cols[3] || '';
     const hrs      = parseFloat(cols[4]) || 0;
     const startStr = cols[5] || '';
+    const endStr   = cols[6] || '';
     const total    = parseFloat(cols[8]) || 0;
 
     if (SKIP_TYPES.has(subType)) return;
-    if (!startStr) return;
+    if (!startStr || !endStr) return;
     if (!['Warehouse','Embroidery'].includes(dept)) return;
 
-    const d = parseDate(startStr);
-    if (!d || isNaN(d)) return;
-    const ym = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+    const startD = parseDate(startStr);
+    const endD   = parseDate(endStr);
+    if (!startD || !endD || isNaN(startD) || isNaN(endD)) return;
 
-    if (!costByMonth[ym]) costByMonth[ym] = { whHrs:0, whCost:0, embHrs:0, embCost:0 };
-    if (dept === 'Warehouse')  { costByMonth[ym].whHrs  += hrs;   costByMonth[ym].whCost  += total; }
-    if (dept === 'Embroidery') { costByMonth[ym].embHrs += hrs;   costByMonth[ym].embCost += total; }
+    // Count total days in pay period
+    const totalDays = Math.round((endD - startD) / 86400000) + 1;
+    if (totalDays <= 0) return;
+
+    // Walk each day and accumulate daily share to its month
+    const cur = new Date(startD);
+    while (cur <= endD) {
+      const ym = cur.getFullYear() + '-' + String(cur.getMonth()+1).padStart(2,'0');
+      if (!costByMonth[ym]) costByMonth[ym] = { whHrs:0, whCost:0, embHrs:0, embCost:0 };
+      const share = 1 / totalDays;
+      if (dept === 'Warehouse')  { costByMonth[ym].whHrs  += hrs * share;   costByMonth[ym].whCost  += total * share; }
+      if (dept === 'Embroidery') { costByMonth[ym].embHrs += hrs * share;   costByMonth[ym].embCost += total * share; }
+      cur.setDate(cur.getDate() + 1);
+    }
   });
 
   // ── 2. Aggregate AU shipping by calendar month ────────────────────────────
@@ -553,8 +564,7 @@ function processData(costText, shipText) {
   const ordIdx    = header.findIndex(h => h.includes('order count'));
   const locIdx    = header.findIndex(h => h.includes('location'));
 
-  const shipByMonth = {}; // ym => { qty, ord }
-
+  const shipByMonth = {};
   shipLines.forEach(cols => {
     const loc = locIdx !== -1 ? cols[locIdx] : '';
     if (!loc.toLowerCase().includes('uni hill') && loc !== '') return;
@@ -571,7 +581,7 @@ function processData(costText, shipText) {
   // ── 3. Join on month ──────────────────────────────────────────────────────
   const allYMs = [...new Set([...Object.keys(costByMonth), ...Object.keys(shipByMonth)])].sort();
 
-  const months = allYMs.map(ym => {
+  return allYMs.map(ym => {
     const c = costByMonth[ym] || { whHrs:0, whCost:0, embHrs:0, embCost:0 };
     const s = shipByMonth[ym] || { qty:0, ord:0 };
 
@@ -584,7 +594,7 @@ function processData(costText, shipText) {
 
     return {
       ym,
-      startDate: ym, // used by FY nav
+      startDate: ym,
       whHrs,   whCost,
       embHrs:  c.embHrs, embCost: c.embCost,
       combHrs, combCost,
@@ -595,8 +605,6 @@ function processData(costText, shipText) {
       combUph: combHrs > 0 && units > 0 ? units / combHrs : null,
     };
   });
-
-  return months;
 }
 
 // ── FILTERED DATA ─────────────────────────────────────────────────────────────
@@ -704,7 +712,7 @@ function buildKPI(data, { hrs, cost, cpu, uph }) {
     <div class="kpi ${avgCpu !== null ? (cpuGood ? 'target-met' : 'target-miss') : 'highlight'}">
       <div class="kpi-label">Cost / Unit</div>
       <div class="kpi-value">${avgCpu !== null ? fmtDollar(avgCpu, 2) : '—'}</div>
-      <div class="kpi-sub">4-week avg</div>
+      <div class="kpi-sub">${periodLabel}</div>
       ${avgCpu !== null ? `<div class="kpi-target ${cpuGood ? 'good' : 'bad'}">${cpuGood ? '&#10003; Under $1.00' : '&#9650; Over $1.00 target'}</div>` : ''}
     </div>
     <div class="kpi highlight">
