@@ -573,24 +573,21 @@ function processData(costText, shipText) {
     if (!startStr || !endStr) return;
     if (!['Warehouse','Embroidery'].includes(dept)) return;
 
+    // Attribute entire pay period to the month of the End Date
+    // This avoids artificially splitting hours that belong to one pay run
+    const endD = parseDate(endStr);
     const startD = parseDate(startStr);
-    const endD   = parseDate(endStr);
-    if (!startD || !endD || isNaN(startD) || isNaN(endD)) return;
+    if (!endD || isNaN(endD)) return;
 
-    // Count total days in pay period
-    const totalDays = Math.round((endD - startD) / 86400000) + 1;
-    if (totalDays <= 0) return;
+    // Use end date month — that's when the pay period closes
+    // Fall back to start date if end date missing
+    const refD = (endD && !isNaN(endD)) ? endD : startD;
+    if (!refD || isNaN(refD)) return;
 
-    // Walk each day and accumulate daily share to its month
-    const cur = new Date(startD);
-    while (cur <= endD) {
-      const ym = cur.getFullYear() + '-' + String(cur.getMonth()+1).padStart(2,'0');
-      if (!costByMonth[ym]) costByMonth[ym] = { whHrs:0, whCost:0, embHrs:0, embCost:0 };
-      const share = 1 / totalDays;
-      if (dept === 'Warehouse')  { costByMonth[ym].whHrs  += hrs * share;   costByMonth[ym].whCost  += total * share; }
-      if (dept === 'Embroidery') { costByMonth[ym].embHrs += hrs * share;   costByMonth[ym].embCost += total * share; }
-      cur.setDate(cur.getDate() + 1);
-    }
+    const ym = refD.getFullYear() + '-' + String(refD.getMonth()+1).padStart(2,'0');
+    if (!costByMonth[ym]) costByMonth[ym] = { whHrs:0, whCost:0, embHrs:0, embCost:0 };
+    if (dept === 'Warehouse')  { costByMonth[ym].whHrs  += hrs;   costByMonth[ym].whCost  += total; }
+    if (dept === 'Embroidery') { costByMonth[ym].embHrs += hrs;   costByMonth[ym].embCost += total; }
   });
 
   // ── 2. Aggregate AU shipping by calendar month ────────────────────────────
