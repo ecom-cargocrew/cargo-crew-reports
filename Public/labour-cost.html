@@ -328,6 +328,37 @@ tr:hover td { background: var(--surface2); }
 }
 #loadingOverlay .spin { font-size: 32px; animation: spin 1.2s linear infinite; }
 #loadingOverlay .msg { font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: var(--accent); }
+
+  .toggle-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    margin-bottom: 20px;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    user-select: none;
+  }
+  .toggle-track {
+    width: 36px; height: 20px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    position: relative;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .toggle-track.on { background: var(--accent); border-color: var(--accent); }
+  .toggle-thumb {
+    width: 14px; height: 14px;
+    background: var(--text);
+    border-radius: 50%;
+    position: absolute;
+    top: 2px; left: 2px;
+    transition: transform 0.2s;
+  }
+  .toggle-track.on .toggle-thumb { transform: translateX(16px); }
 </style>
 </head>
 <body>
@@ -374,6 +405,13 @@ tr:hover td { background: var(--surface2); }
 <div class="time-bar" id="fyBar">
   <span class="time-label">Financial Year:</span>
 </div>
+
+<label class="toggle-wrap" id="fullMonthsToggle" title="Exclude the current month if it is still in progress">
+  <div class="toggle-track on" id="toggleTrack">
+    <div class="toggle-thumb"></div>
+  </div>
+  <span>Full months only</span>
+</label>
 
 <!-- KPI cards -->
 <div class="kpi-row" id="kpiRow"></div>
@@ -427,6 +465,7 @@ const TARGET_CPU = 1.00;
 let WEEKS   = []; // processed weekly rows
 let currentView  = 'wh';   // 'wh' | 'combined'
 let currentFY = 'ALL';    // 'ALL' or e.g. 2026
+let fullMonthsOnly = true;
 let charts = {};
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -697,9 +736,19 @@ function buildFYNav() {
   });
 }
 
+function getLatestYM() {
+  // Latest month in the dataset
+  if (!WEEKS.length) return null;
+  return WEEKS[WEEKS.length - 1].ym;
+}
+
 function filteredWeeks() {
-  if (currentFY === 'ALL') return WEEKS;
-  return WEEKS.filter(w => getWeekFY(w.startDate) === currentFY);
+  let data = currentFY === 'ALL' ? WEEKS : WEEKS.filter(w => getWeekFY(w.startDate) === currentFY);
+  if (fullMonthsOnly) {
+    const latest = getLatestYM();
+    data = data.filter(w => w.ym !== latest);
+  }
+  return data;
 }
 
 // ── SETTERS ───────────────────────────────────────────────────────────────────
@@ -714,8 +763,21 @@ function setView(v) {
 
 
 // ── RENDER ────────────────────────────────────────────────────────────────────
+function buildToggle() {
+  const track = document.getElementById('toggleTrack');
+  const label = document.querySelector('.toggle-wrap span');
+  if (!track) return;
+  track.className = 'toggle-track' + (fullMonthsOnly ? ' on' : '');
+  document.getElementById('fullMonthsToggle').onclick = () => {
+    fullMonthsOnly = !fullMonthsOnly;
+    track.className = 'toggle-track' + (fullMonthsOnly ? ' on' : '');
+    render();
+  };
+}
+
 function render() {
   buildFYNav();
+  buildToggle();
   const data = filteredWeeks();
   if (!data.length) return;
 
@@ -772,6 +834,11 @@ function buildKPI(data, { hrs, cost, cpu, uph }) {
       <div class="kpi-label">Total Hours</div>
       <div class="kpi-value">${fmt(totalHrs, 0)}</div>
       <div class="kpi-sub">${periodLabel}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Avg Hours / Month</div>
+      <div class="kpi-value">${fmt(data.length > 0 ? totalHrs / data.length : 0, 0)}</div>
+      <div class="kpi-sub">${data.length} months</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">Total Cost</div>
