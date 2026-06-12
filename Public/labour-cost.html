@@ -573,16 +573,33 @@ function processData(costText, shipText) {
     if (!startStr || !endStr) return;
     if (!['Warehouse','Embroidery'].includes(dept)) return;
 
-    // Attribute entire pay period to the month of the End Date
-    // This avoids artificially splitting hours that belong to one pay run
+    // Attribute pay period to the month that contains the MAJORITY of days
+    // e.g. 27/4 - 10/5 (14 days): 4 days in Apr, 10 days in May → May
+    // e.g. 11/5 - 24/5 (14 days): all in May → May
+    // e.g. 25/5 - 7/6 (14 days): 7 days in May, 7 days in June → tie → use end month
     const endD   = parseDate(endStr);
     const startD = parseDate(startStr);
+    if (!endD || isNaN(endD)) return;
 
-    // Use end date if available, fall back to start date
-    const refD = (endD && !isNaN(endD)) ? endD : (startD && !isNaN(startD)) ? startD : null;
-    if (!refD) return;
+    let ym;
+    if (startD && !isNaN(startD) && startD.getMonth() !== endD.getMonth()) {
+      // Period spans two months — find which has more days
+      const totalDays = Math.round((endD - startD) / 86400000) + 1;
+      // Days in start month = days from start to end of that month
+      const endOfStartMonth = new Date(startD.getFullYear(), startD.getMonth()+1, 0);
+      const daysInStart = Math.round((endOfStartMonth - startD) / 86400000) + 1;
+      const daysInEnd   = totalDays - daysInStart;
+      // Attribute to whichever month has more days; tie goes to end month
+      if (daysInStart > daysInEnd) {
+        ym = startD.getFullYear() + '-' + String(startD.getMonth()+1).padStart(2,'0');
+      } else {
+        ym = endD.getFullYear() + '-' + String(endD.getMonth()+1).padStart(2,'0');
+      }
+    } else {
+      // Same month or no start date — use end date month
+      ym = endD.getFullYear() + '-' + String(endD.getMonth()+1).padStart(2,'0');
+    }
 
-    const ym = refD.getFullYear() + '-' + String(refD.getMonth()+1).padStart(2,'0');
     if (!costByMonth[ym]) costByMonth[ym] = { whHrs:0, whCost:0, embHrs:0, embCost:0 };
     if (dept === 'Warehouse')  { costByMonth[ym].whHrs  += hrs;   costByMonth[ym].whCost  += total; }
     if (dept === 'Embroidery') { costByMonth[ym].embHrs += hrs;   costByMonth[ym].embCost += total; }
