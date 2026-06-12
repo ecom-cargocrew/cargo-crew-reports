@@ -567,7 +567,7 @@ function processData(costText, shipText) {
     const hrs      = parseFloat(cHrs   >= 0 ? cols[cHrs]   : cols[4]) || 0;
     const startStr = (cStart >= 0 ? cols[cStart] : cols[5]) || '';
     const endStr   = (cEnd   >= 0 ? cols[cEnd]   : cols[6]) || '';
-    const total    = parseFloat(cTotal >= 0 ? cols[cTotal] : cols[8]) || 0;
+    const total    = parseFloat((cTotal >= 0 ? cols[cTotal] : cols[8] || '').replace(/,/g, '')) || 0;
 
     if (SKIP_TYPES.has(subType)) return;
     if (!startStr || !endStr) return;
@@ -575,14 +575,12 @@ function processData(costText, shipText) {
 
     // Attribute entire pay period to the month of the End Date
     // This avoids artificially splitting hours that belong to one pay run
-    const endD = parseDate(endStr);
+    const endD   = parseDate(endStr);
     const startD = parseDate(startStr);
-    if (!endD || isNaN(endD)) return;
 
-    // Use end date month — that's when the pay period closes
-    // Fall back to start date if end date missing
-    const refD = (endD && !isNaN(endD)) ? endD : startD;
-    if (!refD || isNaN(refD)) return;
+    // Use end date if available, fall back to start date
+    const refD = (endD && !isNaN(endD)) ? endD : (startD && !isNaN(startD)) ? startD : null;
+    if (!refD) return;
 
     const ym = refD.getFullYear() + '-' + String(refD.getMonth()+1).padStart(2,'0');
     if (!costByMonth[ym]) costByMonth[ym] = { whHrs:0, whCost:0, embHrs:0, embCost:0 };
