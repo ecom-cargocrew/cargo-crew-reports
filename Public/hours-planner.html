@@ -135,7 +135,6 @@ td:first-child { text-align:left; }
       <th class="wk" id="th-wk4">Wk 4</th>
       <th class="wk" id="th-wk5">Wk 5</th>
       <th>Total Hrs</th>
-      <th>Est. Cost</th>
       <th style="width:30px;"></th>
     </tr></thead>
     <tbody id="rosterBody"></tbody>
@@ -338,7 +337,6 @@ function renderTable() {
     var cost = Math.round(hrs * (p.rate||0));
     var rowClass = (p.type === "FT" ? "ft" : p.type === "PT" ? "pt" : "cas") + "-row";
     var rateCell = '';
-    var costCell = '<span style="color:var(--muted);">$' + cost.toLocaleString() + '</span>';
     var wkCells = p.wk.map(function(h, wi) {
       return '<td><input class="hrs-input' + (h==0?" zero":"") + '" type="number" value="' + h + '" min="0" max="80" step="0.5" onchange="updateHrs(' + idx + ',' + wi + ',this.value)" oninput="this.className=\'hrs-input\'+(+this.value==0?\' zero\':\'\');updateHrs(' + idx + ',' + wi + ',this.value)"></td>';
     }).join("");
@@ -347,7 +345,6 @@ function renderTable() {
       '<td><span class="type-badge ' + p.type + '" onclick="toggleType(' + idx + ')">' + p.type + '</span></td>' +
       wkCells +
       '<td style="font-weight:700;color:' + (hrs>0?"var(--text)":"var(--muted)") + ';">' + hrs + "</td>" +
-      "<td>" + costCell + "</td>" +
       '<td><button onclick="removeRow(' + idx + ')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 6px;">&times;</button></td>' +
     "</tr>";
   }).join("");
@@ -358,8 +355,7 @@ function renderTable() {
     '<tr class="totals-row">' +
     "<td><strong>TOTALS</strong></td><td></td><td></td>" +
     wkTotals.map(function(w) { return '<td style="font-weight:700;color:var(--accent);">' + w + "</td>"; }).join("") +
-    '<td style="font-weight:700;color:var(--accent);">' + t.totalHrs + "</td>" +
-    "<td><strong>$" + Math.round(t.totalCost).toLocaleString() + "</strong></td>" +
+    '<td style="font-weight:700;color:var(--accent);">' + t.totalHrs + "</td>" + +
     "<td></td></tr>";
 }
 
@@ -377,7 +373,7 @@ function updateHrs(idx, wi, val) {
     tds[3].textContent = wkTotals[0]; tds[4].textContent = wkTotals[1];
     tds[5].textContent = wkTotals[2]; tds[6].textContent = wkTotals[3];
     tds[7].textContent = wkTotals[4]; tds[8].textContent = t.totalHrs;
-    tds[9].innerHTML   = "<strong>$" + Math.round(t.totalCost).toLocaleString() + "</strong>";
+    
   }
   deferSave();
 }
@@ -422,14 +418,13 @@ function exportCSV() {
   rows.push(["Projected Cost", "$"+Math.round(t.totalCost).toLocaleString()]);
   rows.push(["Projected Cost/Unit", t.projCpu ? "$"+t.projCpu.toFixed(2) : "-"]);
   rows.push([]);
-  rows.push(["Name","Type",wkLabels[0],wkLabels[1],wkLabels[2],wkLabels[3],wkLabels[4],"Total Hrs","Est. Cost"]);
+  rows.push(["Name","Type",wkLabels[0],wkLabels[1],wkLabels[2],wkLabels[3],wkLabels[4],"Total Hrs"]);
   roster.forEach(function(p) {
     var hrs  = p.wk.reduce(function(s,h) { return s+(+h||0); }, 0);
-    var cost = Math.round(hrs * (p.rate||0));
-    rows.push([p.name, p.type, p.wk[0], p.wk[1], p.wk[2], p.wk[3], p.wk[4]||0, hrs, "$"+cost]);
+    rows.push([p.name, p.type, p.wk[0], p.wk[1], p.wk[2], p.wk[3], p.wk[4]||0, hrs]);
   });
   var wkT = [0,1,2,3,4].map(function(wi) { return roster.reduce(function(s,p) { return s+(+p.wk[wi]||0); }, 0); });
-  rows.push(["TOTALS","",wkT[0],wkT[1],wkT[2],wkT[3],wkT[4],t.totalHrs,"$"+Math.round(t.totalCost).toLocaleString()]);
+  rows.push(["TOTALS","",wkT[0],wkT[1],wkT[2],wkT[3],wkT[4],t.totalHrs]);
   var csv = rows.map(function(r) {
     return r.map(function(v) {
       var s = String(v == null ? "" : v);
